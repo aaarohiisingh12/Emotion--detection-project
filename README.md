@@ -27,6 +27,7 @@ Preprocesses face image
 Passes it into trained CNN model
 Predicts emotion label
 Displays result on screen in real time
+
 📁 Project Structure
 emotion_project/
 │
@@ -39,6 +40,7 @@ emotion_project/
 ├── .gitignore
 ├── requirements.txt
 └── README.md
+
 🚀 How to Run
 1. Clone the repository
 git clone https://github.com/your-username/Emotion--detection-project.git
