@@ -5,36 +5,40 @@ import pandas as pd
 import os
 
 # -------------------------------
-# Distance function
+# distance function between 2 points refer to documentation before changes
+# math.hypot gives euclidean distance
 def distance(p1, p2):
     return math.hypot(p1[0] - p2[0], p1[1] - p2[1])
 
 # -------------------------------
-# Emotion detection (IMPROVED + SCORE-BASED ANGRY)
+# emotion detection function
+# basic facial measurements and thresholds
+# refer to mediapipe documentation for values and changes
 def detect_emotion(landmarks):
     try:
-        # Basic features
+        # getting mouth width and how open the mouth is
         mouth_width = distance(landmarks[61], landmarks[291])
         mouth_open = distance(landmarks[13], landmarks[14])
 
+        # measuring how open the eyes are
         left_eye_open = distance(landmarks[159], landmarks[145])
         right_eye_open = distance(landmarks[386], landmarks[374])
         eye_open = (left_eye_open + right_eye_open) / 2
 
-        # Eyebrow
+        #eyebrow movement
         left_eyebrow = distance(landmarks[159], landmarks[145])
         right_eyebrow = distance(landmarks[386], landmarks[374])
         eyebrow_avg = (left_eyebrow + right_eyebrow) / 2
 
-        # Eye shape
+        # calculate eye shape ratio (height vs width)
         eye_width = distance(landmarks[33], landmarks[133])
         eye_height = distance(landmarks[159], landmarks[145])
         eye_ratio = eye_height / eye_width
 
-        # Nose width
+        # nose width (not fully sure how useful this is yet) its the flair for angriness
         nose_width = distance(landmarks[98], landmarks[327])
 
-        # Face normalization
+        # using face width to normalize values so different face sizes work
         face_width = distance(landmarks[234], landmarks[454])
 
         mouth_width /= face_width
@@ -44,7 +48,8 @@ def detect_emotion(landmarks):
         nose_width /= face_width
 
         # -------------------------------
-        # 😠 ANGRY (SCORE-BASED — IMPROVED)
+        # trying a score-based system for angry emotion exp 4
+        # instead of just 1 condition
 
         angry_score = 0
 
@@ -60,20 +65,20 @@ def detect_emotion(landmarks):
         if nose_width < 0.04:
             angry_score += 1
 
-        # At least 2 signals required
+        # if at least 2 conditions match, classify as angry
         if angry_score >= 2:
             return "angry"
 
         # -------------------------------
-        # 😀 HAPPY
+        # happy expression (wide smile + open eyes)
         elif mouth_width > 0.5 and eye_open > 0.025:
             return "happy"
 
-        # 😲 SURPRISED
+        # surprised expression (wide open mouth + eyes)
         elif mouth_open > 0.05 and eye_open > 0.04 and eye_ratio > 0.35:
             return "surprised"
 
-        # 😞 SAD
+        # sad expression (smaller mouth, less open)
         elif mouth_width < 0.35 and mouth_open < 0.025:
             return "sad"
 
@@ -85,34 +90,39 @@ def detect_emotion(landmarks):
         return "unknown"
 
 # -------------------------------
-# MediaPipe setup
+# setting up mediapipe face mesh
+# i followed documentation for this part
 mp_face_mesh = mp.solutions.face_mesh
 
 face_mesh = mp_face_mesh.FaceMesh(
-    static_image_mode=True,
+    static_image_mode=True,  # since i am using images not video
     max_num_faces=1,
     refine_landmarks=True,
     min_detection_confidence=0.5
 )
 
 # -------------------------------
-# Paths
+# folder paths
 dataset_path = "dataset"
 results_folder = "results"
+
+# making results folder if it doesn't exist
 os.makedirs(results_folder, exist_ok=True)
 
 # -------------------------------
-# Logging
+# storing results in a list 
 log = []
 
 # -------------------------------
-# Process dataset
+# looping through dataset folders
+# each folder is named as an emotion
 for emotion_folder in os.listdir(dataset_path):
     emotion_dir = os.path.join(dataset_path, emotion_folder)
 
     if not os.path.isdir(emotion_dir):
         continue
 
+    # looping through all images inside that emotion folder
     for image_name in os.listdir(emotion_dir):
         image_path = os.path.join(emotion_dir, image_name)
 
@@ -120,6 +130,7 @@ for emotion_folder in os.listdir(dataset_path):
         if image is None:
             continue
 
+        # converting BGR to RGB because mediapipe expects RGB its more stable
         rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         results = face_mesh.process(rgb_image)
 
@@ -129,7 +140,7 @@ for emotion_folder in os.listdir(dataset_path):
         if results.multi_face_landmarks:
             face_landmarks = results.multi_face_landmarks[0]
 
-            # Extract needed landmarks
+            # extracting only important landmark points
             for idx in [13, 14, 61, 291, 145, 159, 374, 386, 33, 133, 98, 327, 234, 454]:
                 x = int(face_landmarks.landmark[idx].x * image.shape[1])
                 y = int(face_landmarks.landmark[idx].y * image.shape[0])
@@ -137,6 +148,7 @@ for emotion_folder in os.listdir(dataset_path):
 
             predicted = detect_emotion(landmarks_dict)
 
+        # storing results
         log.append({
             "image": image_name,
             "actual": emotion_folder.lower(),
@@ -146,7 +158,7 @@ for emotion_folder in os.listdir(dataset_path):
         print(f"{image_name} → Actual: {emotion_folder} | Predicted: {predicted}")
 
 # -------------------------------
-# Save results
+# saving results to csv file
 df = pd.DataFrame(log)
 csv_path = os.path.join(results_folder, "batch_results.csv")
 df.to_csv(csv_path, index=False)
